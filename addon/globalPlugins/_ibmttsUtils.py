@@ -4,6 +4,7 @@
 #globalPlugins/_ibmttsutils.py
 
 import config, json, os, pickle, ssl, time, winUser, wx, zipfile
+import wx.adv
 from os import path
 from ctypes import windll
 from urllib.request import urlopen
@@ -314,21 +315,19 @@ class UpdateHandler:
 			return
 		self.isError = False
 		if self.state.pendingFile and path.exists(self.state.pendingFile):
-			# if this happen, update the last check but don't save it to try again if the user restarts NVDA.
-			self.state.lastCheck = time.time() *1000
+			self.state.lastCheck = time.time() * 1000
 			self.updateTimer()
 			return self.installAddon()
 		try:
 			curAddon = next(addonHandler.getAvailableAddons(filterFunc=lambda x: x.name == self.addonName))
 		except:
-			# if the addon can't be found, the auto update breaks at all.
 			return log.error(f"error getting the current addon {self.addonName}", exc_info=True)
 		try:
 			d = self.service.getUpdateInfo()
 		except:
 			self.isError = True
 			return self.updateTimer()
-		self.state.lastCheck = time.time() *1000
+		self.state.lastCheck = time.time() * 1000
 		self.state.lastReleaseVersion = d['version']
 		self.state.releaseDate = d['releaseDate']
 		self.saveState()
@@ -343,20 +342,35 @@ class UpdateHandler:
 					wx.OK|wx.ICON_INFORMATION,
 					gui.mainFrame
 				)
-			return
+				return
 		updateMsg = _(
-			# Translators: A message asking the user if they wish to update the add-on
 			"A new version of %s was found. The new version is %s. Would you like to update this add-on now?"
 		) % (self.addonName, d['version'])
-		# Translators: Title for message asking if the user wishes to update the add-on.
 		updateTitle = _("Update add-on")
-		result = gui.messageBox(
-			message=updateMsg,
-			caption=updateTitle,
-			style=wx.YES | wx.NO | wx.ICON_WARNING
-		)
-		if wx.YES == result:
-			self.startUpdateProcess(d)
+
+		if fromGui:
+			result = gui.messageBox(
+				message=updateMsg,
+				caption=updateTitle,
+				style=wx.YES | wx.NO | wx.ICON_WARNING
+			)
+			if wx.YES == result:
+				self.startUpdateProcess(d)
+		else:
+			# Show a toast notification
+			toast = wx.adv.NotificationMessage(
+				updateTitle,
+				updateMsg,
+				parent=gui.mainFrame,
+				flags=wx.ICON_WARNING
+			)
+			toast.Show()
+
+			def on_notification_click(event):
+				self.startUpdateProcess(d)
+
+			toast.Bind(wx.adv.EVT_NOTIFICATION_MESSAGE_CLICK, on_notification_click)
+
 		self.updateTimer()
 
 	def autoCheckUpdate(self):
